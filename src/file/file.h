@@ -27,6 +27,52 @@
 #include "tx/lock.h"
 #include "utils/utils.h"
 
+// try to open a file with checking whether the given file is in MadFS format
+static bool try_open(int& fd, struct stat& stat_buf, const char* pathname,
+                      int flags, mode_t mode) {
+  madfs::TimerGuard<madfs::Event::OPEN_SYS> timer_guard;
+
+  if ((flags & O_ACCMODE) == O_WRONLY) {
+    LOG_INFO("File \"%s\" opened with O_WRONLY. Changed to O_RDWR.",
+              pathname);
+    flags &= ~O_WRONLY;
+    flags |= O_RDWR;
+  }
+
+  fd = SAFE_CALL_POSIX_FN(open, pathname, flags, mode);
+  if (unlikely(fd < 0)) {
+    LOG_WARN("File \"%s\" open failed: %m", pathname);
+    return false;
+  }
+
+  if (!(flags & O_CREAT)) {
+    // a non-empty file w/o shm_path cannot be a MadFS file
+    ssize_t rc = fgetxattr(fd, madfs::SHM_XATTR_NAME, nullptr, 0);
+    if (rc == -1) return false;
+  }
+
+  int rc = SAFE_CALL_POSIX_FN(fstat, _STAT_VER, fd, &stat_buf);
+  // posix::fstat(fd, &stat_buf);
+  if (unlikely(rc < 0)) {
+    LOG_WARN("File \"%s\" fstat failed: %m. Fallback to syscall.", pathname);
+    return false;
+  }
+
+  // we don't handle non-normal file (e.g., socket, directory, block dev)
+  if (unlikely(!S_ISREG(stat_buf.st_mode) && !S_ISLNK(stat_buf.st_mode))) {
+    LOG_WARN("Non-normal file \"%s\". Fallback to syscall.", pathname);
+    return false;
+  }
+
+  if (!IS_ALIGNED(stat_buf.st_size, madfs::BLOCK_SIZE)) {
+    LOG_WARN("File size not aligned for \"%s\". Fallback to syscall",
+              pathname);
+    return false;
+  }
+
+  return true;
+}
+
 namespace madfs::utility {
 class Converter;
 }  // namespace madfs::utility
@@ -83,51 +129,6 @@ class File {
                               shm_mgr.alloc_per_thread_data()));
     PANIC_IF(!ok, "insert to thread-local allocators failed");
     return &it->second;
-  }
-
-  // try to open a file with checking whether the given file is in MadFS format
-  static bool try_open(int& fd, struct stat& stat_buf, const char* pathname,
-                       int flags, mode_t mode) {
-    TimerGuard<Event::OPEN_SYS> timer_guard;
-
-    if ((flags & O_ACCMODE) == O_WRONLY) {
-      LOG_INFO("File \"%s\" opened with O_WRONLY. Changed to O_RDWR.",
-               pathname);
-      flags &= ~O_WRONLY;
-      flags |= O_RDWR;
-    }
-
-    fd = posix::open(pathname, flags, mode);
-    if (unlikely(fd < 0)) {
-      LOG_WARN("File \"%s\" open failed: %m", pathname);
-      return false;
-    }
-
-    if (!(flags & O_CREAT)) {
-      // a non-empty file w/o shm_path cannot be a MadFS file
-      ssize_t rc = fgetxattr(fd, SHM_XATTR_NAME, nullptr, 0);
-      if (rc == -1) return false;
-    }
-
-    int rc = posix::fstat(fd, &stat_buf);
-    if (unlikely(rc < 0)) {
-      LOG_WARN("File \"%s\" fstat failed: %m. Fallback to syscall.", pathname);
-      return false;
-    }
-
-    // we don't handle non-normal file (e.g., socket, directory, block dev)
-    if (unlikely(!S_ISREG(stat_buf.st_mode) && !S_ISLNK(stat_buf.st_mode))) {
-      LOG_WARN("Non-normal file \"%s\". Fallback to syscall.", pathname);
-      return false;
-    }
-
-    if (!IS_ALIGNED(stat_buf.st_size, BLOCK_SIZE)) {
-      LOG_WARN("File size not aligned for \"%s\". Fallback to syscall",
-               pathname);
-      return false;
-    }
-
-    return true;
   }
 
   friend std::ostream& operator<<(std::ostream& out, File& f);

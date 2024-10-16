@@ -10,7 +10,7 @@ static int open_impl(const char* pathname, int flags, mode_t mode) {
 
   int fd;
   struct stat stat_buf;
-  bool is_valid = dram::File::try_open(fd, stat_buf, pathname, flags, mode);
+  bool is_valid = try_open(fd, stat_buf, pathname, flags, mode);
   if (!is_valid) {
     LOG_DEBUG("posix::open(%s, %x, %x) = %d", pathname, flags, mode, fd);
     return fd;
@@ -33,6 +33,7 @@ static int open_impl(const char* pathname, int flags, mode_t mode) {
 extern "C" {
 int open(const char* pathname, int flags, ...) {
   mode_t mode = 0;
+  // printf("open: %s\n", pathname);
   if (__OPEN_NEEDS_MODE(flags)) {
     va_list arg;
     va_start(arg, flags);
@@ -45,6 +46,7 @@ int open(const char* pathname, int flags, ...) {
 
 int open64(const char* pathname, int flags, ...) {
   mode_t mode = 0;
+  // printf("open64: %s\n", pathname);
   if (__OPEN_NEEDS_MODE(flags)) {
     va_list arg;
     va_start(arg, flags);
@@ -69,7 +71,9 @@ int openat64([[maybe_unused]] int dirfd, const char* pathname, int flags, ...) {
 }
 
 FILE* fopen(const char* filename, const char* mode) {
-  FILE* file = posix::fopen(filename, mode);
+  FILE* file;
+  printf("fopen: %s\n", filename);
+  file = SAFE_CALL_POSIX_FN(fopen, filename, mode);
   LOG_DEBUG("posix::fopen(%s, %s) = %p", filename, mode, file);
   return file;
 }

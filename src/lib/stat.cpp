@@ -21,7 +21,7 @@ static int fstat_impl(int fd, struct stat* buf) {
 }
 
 static int stat_impl(const char* pathname, struct stat* buf) {
-  if (int rc = posix::stat(pathname, buf); unlikely(rc < 0)) {
+  if (int rc = SAFE_CALL_POSIX_FN(stat, _STAT_VER, pathname, buf); unlikely(rc < 0)) {
     LOG_WARN("posix::stat(%s) = %d: %m", pathname, rc);
     return rc;
   }

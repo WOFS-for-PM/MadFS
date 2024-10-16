@@ -11,7 +11,8 @@ int close(int fd) {
     return 0;
   } else {
     LOG_DEBUG("posix::close(%d)", fd);
-    return posix::close(fd);
+    // posix::close(fd);
+    return SAFE_CALL_POSIX_FN(close, fd);
   }
 }
 
@@ -21,10 +22,10 @@ int fclose(FILE* stream) {
     LOG_DEBUG("madfs::fclose(%s)", file->path);
     file->fd = -1;
     files.unsafe_erase(fd);
-    return posix::fclose(stream);
+    return SAFE_CALL_POSIX_FN(fclose, stream);
   } else {
     LOG_DEBUG("posix::fclose(%p)", stream);
-    return posix::fclose(stream);
+    return SAFE_CALL_POSIX_FN(fclose, stream);
   }
 }
 }

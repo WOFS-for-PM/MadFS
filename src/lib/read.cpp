@@ -11,7 +11,8 @@ ssize_t read(int fd, void* buf, size_t count) {
     timer.stop<Event::READ>();
     return res;
   } else {
-    auto res = posix::read(fd, buf, count);
+    auto res = SAFE_CALL_POSIX_FN(read, fd, buf, count);
+    // posix::read(fd, buf, count);
     LOG_DEBUG("posix::read(%d, buf, %zu) = %zu", fd, count, res);
     return res;
   }
